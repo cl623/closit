@@ -1,12 +1,17 @@
 "use client";
 
 import type { ReactNode } from "react";
-import type { Avatar, FashionItem } from "@/lib/outfits/types";
+import type { EquippedPiece } from "@/lib/outfits/types";
 import { resolveImageUrl } from "@/lib/items/image-url";
 
 type AvatarStageProps = {
-  avatar: Avatar;
-  equippedItems: FashionItem[];
+  avatar: {
+    name: string;
+    image_path: string;
+    body_width: number;
+    body_height: number;
+  };
+  equippedItems: EquippedPiece[];
   className?: string;
   /** Optional overlay for anchor editing (render children above layers). */
   children?: ReactNode;
@@ -14,10 +19,10 @@ type AvatarStageProps = {
 
 /**
  * Items are positioned by centering each image on (anchor_x, anchor_y)
- * expressed as fractions of the stage width/height.
+ * expressed as fractions of the stage width/height. Render order uses layer_z.
  */
 export function AvatarStage({ avatar, equippedItems, className, children }: AvatarStageProps) {
-  const layers = [...equippedItems].sort((a, b) => a.z_index - b.z_index);
+  const layers = [...equippedItems].sort((a, b) => a.layer_z - b.layer_z);
 
   return (
     <div
@@ -42,7 +47,7 @@ export function AvatarStage({ avatar, equippedItems, className, children }: Avat
           style={{
             left: `${item.anchor_x * 100}%`,
             top: `${item.anchor_y * 100}%`,
-            zIndex: item.z_index,
+            zIndex: item.layer_z,
           }}
           draggable={false}
         />

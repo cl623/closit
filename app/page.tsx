@@ -16,7 +16,7 @@ export default function HomePage() {
           clos.it
         </h1>
         <p className="mt-4 max-w-md text-lg text-muted">
-          Dress a 2D avatar, upload your own pieces, and build outfits that sit right on the body.
+          Dress a 2D avatar, upload your own pieces, and publish outfits for the community to like and save.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <Link
@@ -24,6 +24,12 @@ export default function HomePage() {
             className="rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-white hover:bg-accent-deep"
           >
             Open studio
+          </Link>
+          <Link
+            href="/feed"
+            className="rounded-full border border-border bg-background px-5 py-2.5 text-sm font-semibold hover:border-accent"
+          >
+            Browse feed
           </Link>
           <Link
             href="/upload"

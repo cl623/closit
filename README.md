@@ -2,13 +2,17 @@
 
 Gamified social mood-boarding — style 2D avatars with community fashion items.
 
-## MVP status (Phases 1–2)
+## MVP status (Phases 1–4 + studio upgrades)
 
-- **Dress-up studio** with base avatar + Z-index layering
-- **Draft outfit save/load** (Supabase)
+- **Dress-up studio** with multi-item categories and per-piece layer order
+- **Saved outfits library** (browse / edit / delete drafts)
+- **Draft outfit save/load** and **publish to feed**
 - **User PNG uploads** with category/color/style tags and anchor placement
+- **Outfit likes** plus per-item like / save-to-closet
+- **Weekly leaderboards** for top outfits and top creators
+- **Reporting** for items and outfits (submit + personal report list)
 
-Phases 3–5 (feed, leaderboards, analytics) are deferred.
+Phase 5 (analytics dashboard) is deferred. Full moderation admin UI is deferred.
 
 ## Setup
 
@@ -36,12 +40,17 @@ Fill in `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
 npm run dev
 ```
 
-Without Supabase env vars, the studio still loads local seed wardrobe assets from `/public/seed`. Uploads and draft saves require Supabase.
+Without Supabase env vars, the studio still loads local seed wardrobe assets from `/public/seed`. Uploads, draft saves, feed, leaderboards, and reporting require Supabase.
 
 ## Routes
 
 - `/` — landing
-- `/studio` — dress-up engine
-- `/studio/[id]` — edit a saved draft
+- `/studio` — dress-up engine (multi-layer equip)
+- `/studio/[id]` — edit a saved draft (publish / unpublish)
+- `/outfits` — saved outfits library
+- `/feed` — chronological published outfits
+- `/o/[id]` — published outfit detail (like / save / report)
+- `/leaderboards` — top 10 outfits of the week + top creators
+- `/reports` — reports I submitted
 - `/upload` — import a transparent PNG (auth required)
 - `/login` — sign in / sign up

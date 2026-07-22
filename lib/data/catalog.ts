@@ -1,8 +1,40 @@
-import type { Avatar, FashionItem, OutfitWithItems } from "@/lib/outfits/types";
+import type {
+  Avatar,
+  EquippedPiece,
+  FashionItem,
+  OutfitSummary,
+  OutfitWithItems,
+} from "@/lib/outfits/types";
 import { LOCAL_AVATARS, LOCAL_ITEMS } from "@/lib/seed/local-data";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/client";
 import type { ItemCategory } from "@/lib/items/categories";
+
+function asSingle<T>(value: T | T[] | null | undefined): T | null {
+  if (!value) return null;
+  return Array.isArray(value) ? (value[0] ?? null) : value;
+}
+
+function mapOutfitItems(
+  rows: Array<{
+    item_id: string;
+    slot_category: ItemCategory;
+    layer_z?: number | null;
+    item: FashionItem | FashionItem[] | null;
+  }>,
+): EquippedPiece[] {
+  return rows
+    .map((row) => {
+      const item = asSingle(row.item);
+      if (!item) return null;
+      return {
+        ...item,
+        layer_z: row.layer_z ?? item.z_index,
+      } satisfies EquippedPiece;
+    })
+    .filter((item): item is EquippedPiece => Boolean(item))
+    .sort((a, b) => a.layer_z - b.layer_z);
+}
 
 export async function fetchAvatars(): Promise<Avatar[]> {
   if (!isSupabaseConfigured()) {
@@ -30,22 +62,58 @@ export async function fetchWardrobeItems(userId?: string | null): Promise<Fashio
   }
 
   const supabase = createClient();
-  let query = supabase.from("items").select("*").order("created_at", { ascending: true });
 
-  if (userId) {
-    query = query.or(`is_system.eq.true,owner_id.eq.${userId}`);
-  } else {
-    query = query.eq("is_system", true);
+  if (!userId) {
+    const { data, error } = await supabase
+      .from("items")
+      .select("*")
+      .eq("is_system", true)
+      .order("created_at", { ascending: true });
+
+    if (error || !data?.length) {
+      console.warn("Falling back to local items", error?.message);
+      return LOCAL_ITEMS;
+    }
+    return data as FashionItem[];
   }
 
-  const { data, error } = await query;
+  // System ∪ owned ∪ saved (item_saves) — dedupe by id
+  const [{ data: ownedOrSystem, error: ownedError }, { data: saves, error: savesError }] =
+    await Promise.all([
+      supabase
+        .from("items")
+        .select("*")
+        .or(`is_system.eq.true,owner_id.eq.${userId}`)
+        .order("created_at", { ascending: true }),
+      supabase.from("item_saves").select("item_id, item:items(*)").eq("user_id", userId),
+    ]);
 
-  if (error || !data?.length) {
-    console.warn("Falling back to local items", error?.message);
+  if (ownedError) {
+    console.warn("Falling back to local items", ownedError.message);
     return LOCAL_ITEMS;
   }
 
-  return data as FashionItem[];
+  const byId = new Map<string, FashionItem>();
+  for (const item of ownedOrSystem ?? []) {
+    byId.set(item.id, item as FashionItem);
+  }
+
+  if (!savesError) {
+    for (const row of saves ?? []) {
+      const item = asSingle(row.item);
+      if (item) byId.set(item.id, item as FashionItem);
+    }
+  }
+
+  const merged = Array.from(byId.values());
+  if (!merged.length) {
+    console.warn("Falling back to local items");
+    return LOCAL_ITEMS;
+  }
+
+  return merged.sort(
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+  );
 }
 
 export async function fetchOutfit(outfitId: string): Promise<OutfitWithItems | null> {
@@ -66,15 +134,9 @@ export async function fetchOutfit(outfitId: string): Promise<OutfitWithItems | n
 
   const { data: outfitItems } = await supabase
     .from("outfit_items")
-    .select("item_id, slot_category, item:items(*)")
-    .eq("outfit_id", outfitId);
-
-  const items = (outfitItems ?? [])
-    .map((row) => {
-      const item = Array.isArray(row.item) ? row.item[0] : row.item;
-      return item as FashionItem | undefined;
-    })
-    .filter((item): item is FashionItem => Boolean(item));
+    .select("item_id, slot_category, layer_z, item:items(*)")
+    .eq("outfit_id", outfitId)
+    .order("layer_z", { ascending: true });
 
   return {
     id: outfit.id,
@@ -82,11 +144,47 @@ export async function fetchOutfit(outfitId: string): Promise<OutfitWithItems | n
     avatar_id: outfit.avatar_id,
     name: outfit.name,
     is_published: outfit.is_published,
+    published_at: outfit.published_at ?? null,
     created_at: outfit.created_at,
     updated_at: outfit.updated_at,
-    avatar: (Array.isArray(outfit.avatar) ? outfit.avatar[0] : outfit.avatar) as Avatar,
-    items,
+    avatar: asSingle(outfit.avatar) as Avatar,
+    items: mapOutfitItems(outfitItems ?? []),
   };
+}
+
+export async function fetchUserOutfits(userId: string): Promise<OutfitSummary[]> {
+  if (!isSupabaseConfigured()) {
+    return [];
+  }
+
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("outfits")
+    .select("*, avatar:avatars(*), outfit_items(item_id)")
+    .eq("user_id", userId)
+    .order("updated_at", { ascending: false });
+
+  if (error || !data) {
+    console.warn("Failed to fetch user outfits", error?.message);
+    return [];
+  }
+
+  return data.map((row) => {
+    const avatar = asSingle(row.avatar) as Avatar;
+    const itemRows = Array.isArray(row.outfit_items) ? row.outfit_items : [];
+    return {
+      id: row.id,
+      user_id: row.user_id,
+      avatar_id: row.avatar_id,
+      name: row.name,
+      is_published: row.is_published,
+      published_at: row.published_at ?? null,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      avatar,
+      item_count: itemRows.length,
+    };
+  });
 }
 
 export async function saveOutfitDraft(params: {
@@ -94,17 +192,14 @@ export async function saveOutfitDraft(params: {
   userId: string;
   avatarId: string;
   name: string;
-  equipped: Partial<Record<ItemCategory, FashionItem>>;
+  equipped: EquippedPiece[];
 }): Promise<{ id: string }> {
   if (!isSupabaseConfigured()) {
     throw new Error("Saving outfits requires Supabase configuration.");
   }
 
   const supabase = createClient();
-  const slots = Object.entries(params.equipped).filter(
-    (entry): entry is [ItemCategory, FashionItem] => Boolean(entry[1]),
-  );
-
+  const pieces = params.equipped;
   let outfitId = params.outfitId ?? null;
 
   if (outfitId) {
@@ -136,12 +231,13 @@ export async function saveOutfitDraft(params: {
     outfitId = data.id;
   }
 
-  if (slots.length > 0) {
+  if (pieces.length > 0) {
     const { error } = await supabase.from("outfit_items").insert(
-      slots.map(([slot_category, item]) => ({
+      pieces.map((piece) => ({
         outfit_id: outfitId!,
-        item_id: item.id,
-        slot_category,
+        item_id: piece.id,
+        slot_category: piece.category,
+        layer_z: piece.layer_z,
       })),
     );
     if (error) throw error;
@@ -173,4 +269,19 @@ export async function deleteUserItem(itemId: string): Promise<void> {
   if (item.image_path && !item.image_path.startsWith("/")) {
     await supabase.storage.from("items").remove([item.image_path.replace(/^items\//, "")]);
   }
+}
+
+export async function deleteOutfit(outfitId: string, userId: string): Promise<void> {
+  if (!isSupabaseConfigured()) {
+    throw new Error("Deleting outfits requires Supabase configuration.");
+  }
+
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("outfits")
+    .delete()
+    .eq("id", outfitId)
+    .eq("user_id", userId);
+
+  if (error) throw error;
 }

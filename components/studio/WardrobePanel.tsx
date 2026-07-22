@@ -6,16 +6,16 @@ import {
   type ItemCategory,
 } from "@/lib/items/categories";
 import { resolveImageUrl } from "@/lib/items/image-url";
-import type { FashionItem } from "@/lib/outfits/types";
+import type { EquippedPiece, FashionItem } from "@/lib/outfits/types";
 
 type WardrobePanelProps = {
   items: FashionItem[];
   activeCategory: ItemCategory;
-  equipped: Partial<Record<ItemCategory, FashionItem>>;
+  equipped: EquippedPiece[];
   currentUserId?: string | null;
   onCategoryChange: (category: ItemCategory) => void;
-  onEquip: (item: FashionItem) => void;
-  onUnequip: (category: ItemCategory) => void;
+  onToggleEquip: (item: FashionItem) => void;
+  onUnequipItem: (itemId: string) => void;
   onDeleteItem?: (item: FashionItem) => void;
 };
 
@@ -25,18 +25,20 @@ export function WardrobePanel({
   equipped,
   currentUserId,
   onCategoryChange,
-  onEquip,
-  onUnequip,
+  onToggleEquip,
+  onUnequipItem,
   onDeleteItem,
 }: WardrobePanelProps) {
   const filtered = items.filter((item) => item.category === activeCategory);
-  const equippedItem = equipped[activeCategory];
+  const equippedIds = new Set(equipped.map((piece) => piece.id));
+  const equippedInCategory = equipped.filter((piece) => piece.category === activeCategory);
 
   return (
     <div className="flex h-full flex-col rounded-3xl border border-border bg-surface">
       <div className="flex flex-wrap gap-2 border-b border-border p-3">
         {ITEM_CATEGORIES.map((category) => {
           const selected = category === activeCategory;
+          const count = equipped.filter((p) => p.category === category).length;
           return (
             <button
               key={category}
@@ -49,27 +51,37 @@ export function WardrobePanel({
               }`}
             >
               {CATEGORY_LABELS[category]}
+              {count > 0 ? ` (${count})` : ""}
             </button>
           );
         })}
       </div>
 
       <div className="flex items-center justify-between px-4 py-3 text-sm">
-        <span className="text-muted">{CATEGORY_LABELS[activeCategory]}</span>
-        {equippedItem && (
+        <span className="text-muted">
+          {CATEGORY_LABELS[activeCategory]}
+          {equippedInCategory.length > 0
+            ? ` · ${equippedInCategory.length} equipped`
+            : ""}
+        </span>
+        {equippedInCategory.length > 0 && (
           <button
             type="button"
-            onClick={() => onUnequip(activeCategory)}
+            onClick={() => {
+              for (const piece of equippedInCategory) {
+                onUnequipItem(piece.id);
+              }
+            }}
             className="text-accent hover:text-accent-deep"
           >
-            Unequip
+            Clear category
           </button>
         )}
       </div>
 
       <ul className="grid flex-1 grid-cols-2 gap-3 overflow-y-auto p-3 sm:grid-cols-3">
         {filtered.map((item) => {
-          const isEquipped = equippedItem?.id === item.id;
+          const isEquipped = equippedIds.has(item.id);
           const canDelete =
             Boolean(onDeleteItem) &&
             !item.is_system &&
@@ -80,7 +92,7 @@ export function WardrobePanel({
             <li key={item.id} className="relative">
               <button
                 type="button"
-                onClick={() => onEquip(item)}
+                onClick={() => onToggleEquip(item)}
                 className={`flex w-full flex-col items-center gap-2 rounded-2xl border p-3 text-left transition ${
                   isEquipped
                     ? "border-accent bg-orange-50"

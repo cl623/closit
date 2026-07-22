@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AvatarStage } from "@/components/studio/AvatarStage";
+import { LayerStack } from "@/components/studio/LayerStack";
 import { OutfitToolbar } from "@/components/studio/OutfitToolbar";
 import { WardrobePanel } from "@/components/studio/WardrobePanel";
 import {
@@ -13,8 +14,9 @@ import {
   fetchWardrobeItems,
   saveOutfitDraft,
 } from "@/lib/data/catalog";
+import { publishOutfit, unpublishOutfit } from "@/lib/data/social";
 import type { ItemCategory } from "@/lib/items/categories";
-import type { Avatar, EquippedSlots, FashionItem } from "@/lib/outfits/types";
+import type { Avatar, EquippedPiece, FashionItem } from "@/lib/outfits/types";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { LOCAL_AVATAR_ID } from "@/lib/seed/local-data";
@@ -23,18 +25,48 @@ type StudioClientProps = {
   outfitId?: string;
 };
 
+function nextLayerZ(equipped: EquippedPiece[], item: FashionItem): number {
+  const sameCategory = equipped.filter((p) => p.category === item.category);
+  if (sameCategory.length === 0) return item.z_index;
+  const maxInCategory = Math.max(...sameCategory.map((p) => p.layer_z));
+  return maxInCategory + 1;
+}
+
+function swapLayerOrder(equipped: EquippedPiece[], itemId: string, direction: "forward" | "back") {
+  const ordered = [...equipped].sort((a, b) => a.layer_z - b.layer_z);
+  const index = ordered.findIndex((p) => p.id === itemId);
+  if (index < 0) return equipped;
+
+  const swapWith = direction === "forward" ? index + 1 : index - 1;
+  if (swapWith < 0 || swapWith >= ordered.length) return equipped;
+
+  const a = ordered[index];
+  const b = ordered[swapWith];
+  const aZ = a.layer_z;
+  const bZ = b.layer_z;
+
+  return equipped.map((piece) => {
+    if (piece.id === a.id) return { ...piece, layer_z: bZ };
+    if (piece.id === b.id) return { ...piece, layer_z: aZ };
+    return piece;
+  });
+}
+
 export function StudioClient({ outfitId }: StudioClientProps) {
   const router = useRouter();
   const [avatars, setAvatars] = useState<Avatar[]>([]);
   const [items, setItems] = useState<FashionItem[]>([]);
   const [avatarId, setAvatarId] = useState(LOCAL_AVATAR_ID);
-  const [equipped, setEquipped] = useState<EquippedSlots>({});
+  const [equipped, setEquipped] = useState<EquippedPiece[]>([]);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<ItemCategory>("top");
   const [name, setName] = useState("Untitled outfit");
   const [userId, setUserId] = useState<string | null>(null);
   const [currentOutfitId, setCurrentOutfitId] = useState<string | null>(outfitId ?? null);
+  const [isPublished, setIsPublished] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const configured = isSupabaseConfigured();
@@ -73,11 +105,9 @@ export function StudioClient({ outfitId }: StudioClientProps) {
           setCurrentOutfitId(outfit.id);
           setAvatarId(outfit.avatar_id);
           setName(outfit.name);
-          const nextEquipped: EquippedSlots = {};
-          for (const item of outfit.items) {
-            nextEquipped[item.category] = item;
-          }
-          setEquipped(nextEquipped);
+          setIsPublished(outfit.is_published);
+          setEquipped(outfit.items);
+          setSelectedItemId(outfit.items[outfit.items.length - 1]?.id ?? null);
         }
       }
 
@@ -95,25 +125,49 @@ export function StudioClient({ outfitId }: StudioClientProps) {
     [avatars, avatarId],
   );
 
-  const equippedList = useMemo(() => Object.values(equipped).filter(Boolean) as FashionItem[], [equipped]);
+  const equippedCount = equipped.length;
 
-  function equipItem(item: FashionItem) {
-    setEquipped((prev) => ({ ...prev, [item.category]: item }));
+  function toggleEquip(item: FashionItem) {
+    setEquipped((prev) => {
+      const exists = prev.some((p) => p.id === item.id);
+      if (exists) {
+        setSelectedItemId((current) => (current === item.id ? null : current));
+        return prev.filter((p) => p.id !== item.id);
+      }
+      const piece: EquippedPiece = { ...item, layer_z: nextLayerZ(prev, item) };
+      setSelectedItemId(item.id);
+      return [...prev, piece];
+    });
     setStatusMessage(null);
   }
 
-  function unequipCategory(category: ItemCategory) {
-    setEquipped((prev) => {
-      const next = { ...prev };
-      delete next[category];
-      return next;
-    });
+  function unequipItem(itemId: string) {
+    setEquipped((prev) => prev.filter((p) => p.id !== itemId));
+    setSelectedItemId((current) => (current === itemId ? null : current));
   }
 
   function resetOutfit() {
-    setEquipped({});
+    setEquipped([]);
+    setSelectedItemId(null);
     setName("Untitled outfit");
     setStatusMessage("Outfit cleared.");
+  }
+
+  async function persistDraft(): Promise<string | null> {
+    if (!userId || !avatar) return null;
+
+    const result = await saveOutfitDraft({
+      outfitId: currentOutfitId,
+      userId,
+      avatarId: avatar.id,
+      name: name.trim() || "Untitled outfit",
+      equipped,
+    });
+    setCurrentOutfitId(result.id);
+    if (!outfitId) {
+      router.replace(`/studio/${result.id}`);
+    }
+    return result.id;
   }
 
   async function handleSave() {
@@ -130,22 +184,57 @@ export function StudioClient({ outfitId }: StudioClientProps) {
     setSaving(true);
     setStatusMessage(null);
     try {
-      const result = await saveOutfitDraft({
-        outfitId: currentOutfitId,
-        userId,
-        avatarId: avatar.id,
-        name: name.trim() || "Untitled outfit",
-        equipped,
-      });
-      setCurrentOutfitId(result.id);
+      await persistDraft();
       setStatusMessage("Draft saved.");
-      if (!outfitId) {
-        router.replace(`/studio/${result.id}`);
-      }
     } catch (err) {
       setStatusMessage(err instanceof Error ? err.message : "Failed to save draft");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handlePublish() {
+    if (!configured) {
+      setStatusMessage("Configure Supabase to publish.");
+      return;
+    }
+    if (!userId) {
+      setStatusMessage("Sign in to publish.");
+      return;
+    }
+    if (equippedCount < 1) {
+      setStatusMessage("Equip at least one item before publishing.");
+      return;
+    }
+
+    setPublishing(true);
+    setStatusMessage(null);
+    try {
+      const id = await persistDraft();
+      if (!id) throw new Error("Failed to save outfit before publish.");
+      await publishOutfit(id);
+      setIsPublished(true);
+      setStatusMessage("Published to the feed.");
+    } catch (err) {
+      setStatusMessage(err instanceof Error ? err.message : "Failed to publish");
+    } finally {
+      setPublishing(false);
+    }
+  }
+
+  async function handleUnpublish() {
+    if (!configured || !userId || !currentOutfitId) return;
+
+    setPublishing(true);
+    setStatusMessage(null);
+    try {
+      await unpublishOutfit(currentOutfitId);
+      setIsPublished(false);
+      setStatusMessage("Removed from the feed.");
+    } catch (err) {
+      setStatusMessage(err instanceof Error ? err.message : "Failed to unpublish");
+    } finally {
+      setPublishing(false);
     }
   }
 
@@ -157,12 +246,7 @@ export function StudioClient({ outfitId }: StudioClientProps) {
     try {
       await deleteUserItem(item.id);
       setItems((prev) => prev.filter((i) => i.id !== item.id));
-      setEquipped((prev) => {
-        if (prev[item.category]?.id !== item.id) return prev;
-        const next = { ...prev };
-        delete next[item.category];
-        return next;
-      });
+      unequipItem(item.id);
       setStatusMessage(`Deleted ${item.name}.`);
     } catch (err) {
       setStatusMessage(err instanceof Error ? err.message : "Failed to delete item");
@@ -179,15 +263,23 @@ export function StudioClient({ outfitId }: StudioClientProps) {
         <div>
           <h1 className="font-[family-name:var(--font-display)] text-3xl">Outfit studio</h1>
           <p className="text-sm text-muted">
-            Layer items by category. Jackets sit over tops; shoes under pants.
+            Stack multiple pieces per category and reorder layers. Jackets can sit over tops.
           </p>
         </div>
-        <Link
-          href="/upload"
-          className="rounded-full border border-border bg-surface px-4 py-2 text-sm font-semibold hover:border-accent"
-        >
-          Upload item
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/outfits"
+            className="rounded-full border border-border bg-surface px-4 py-2 text-sm font-semibold hover:border-accent"
+          >
+            My outfits
+          </Link>
+          <Link
+            href="/upload"
+            className="rounded-full border border-border bg-surface px-4 py-2 text-sm font-semibold hover:border-accent"
+          >
+            Upload item
+          </Link>
+        </div>
       </div>
 
       {!userId && configured && (
@@ -204,22 +296,37 @@ export function StudioClient({ outfitId }: StudioClientProps) {
         name={name}
         canSave={Boolean(userId && configured)}
         saving={saving}
+        publishing={publishing}
+        isPublished={isPublished}
+        canPublish={Boolean(userId && configured && (currentOutfitId || equippedCount > 0))}
         statusMessage={statusMessage}
         onNameChange={setName}
         onSave={handleSave}
+        onPublish={handlePublish}
+        onUnpublish={handleUnpublish}
         onReset={resetOutfit}
       />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(280px,380px)_1fr]">
-        <AvatarStage avatar={avatar} equippedItems={equippedList} className="w-full" />
+        <div className="space-y-4">
+          <AvatarStage avatar={avatar} equippedItems={equipped} className="w-full" />
+          <LayerStack
+            equipped={equipped}
+            selectedItemId={selectedItemId}
+            onSelect={setSelectedItemId}
+            onBringForward={(id) => setEquipped((prev) => swapLayerOrder(prev, id, "forward"))}
+            onSendBackward={(id) => setEquipped((prev) => swapLayerOrder(prev, id, "back"))}
+            onUnequip={unequipItem}
+          />
+        </div>
         <WardrobePanel
           items={items}
           activeCategory={activeCategory}
           equipped={equipped}
           currentUserId={userId}
           onCategoryChange={setActiveCategory}
-          onEquip={equipItem}
-          onUnequip={unequipCategory}
+          onToggleEquip={toggleEquip}
+          onUnequipItem={unequipItem}
           onDeleteItem={userId ? handleDeleteItem : undefined}
         />
       </div>
