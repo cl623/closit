@@ -13,7 +13,6 @@ type LayerStackProps = {
   onUnequip: (itemId: string) => void;
 };
 
-/** Lists equipped pieces front-to-back with layer order controls. */
 export function LayerStack({
   equipped,
   selectedItemId,

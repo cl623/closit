@@ -4,7 +4,6 @@ import type {
   FashionItem,
   FeedOutfit,
   ItemEngagement,
-  OutfitWithItems,
   ProfileSummary,
 } from "@/lib/outfits/types";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
@@ -170,7 +169,6 @@ async function hydrateFeedOutfits(
         like_count: counts.get(row.id) ?? 0,
         liked_by_viewer: liked.has(row.id),
         item_engagement,
-        week_rank: null,
       };
     }),
   );
@@ -407,21 +405,4 @@ export async function toggleItemSave(
   if (countError) throw countError;
 
   return { saved: !existing, save_count: Number(counts?.[0]?.save_count ?? 0) };
-}
-
-/** Owner-facing helper: load draft including publish state. */
-export async function fetchOutfitPublishState(
-  outfitId: string,
-): Promise<Pick<OutfitWithItems, "id" | "is_published" | "published_at" | "user_id"> | null> {
-  if (!isSupabaseConfigured()) return null;
-
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("outfits")
-    .select("id, is_published, published_at, user_id")
-    .eq("id", outfitId)
-    .maybeSingle();
-
-  if (error || !data) return null;
-  return data;
 }

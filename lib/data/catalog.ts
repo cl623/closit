@@ -77,7 +77,6 @@ export async function fetchWardrobeItems(userId?: string | null): Promise<Fashio
     return data as FashionItem[];
   }
 
-  // System ∪ owned ∪ saved (item_saves) — dedupe by id
   const [{ data: ownedOrSystem, error: ownedError }, { data: saves, error: savesError }] =
     await Promise.all([
       supabase
