@@ -4,9 +4,14 @@ type OutfitToolbarProps = {
   name: string;
   canSave: boolean;
   saving: boolean;
+  publishing: boolean;
+  isPublished: boolean;
+  canPublish: boolean;
   statusMessage?: string | null;
   onNameChange: (name: string) => void;
   onSave: () => void;
+  onPublish: () => void;
+  onUnpublish: () => void;
   onReset: () => void;
 };
 
@@ -14,9 +19,14 @@ export function OutfitToolbar({
   name,
   canSave,
   saving,
+  publishing,
+  isPublished,
+  canPublish,
   statusMessage,
   onNameChange,
   onSave,
+  onPublish,
+  onUnpublish,
   onReset,
 }: OutfitToolbarProps) {
   return (
@@ -40,11 +50,30 @@ export function OutfitToolbar({
         <button
           type="button"
           onClick={onSave}
-          disabled={!canSave || saving}
+          disabled={!canSave || saving || publishing}
           className="rounded-full bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-deep disabled:opacity-50"
         >
           {saving ? "Saving…" : "Save draft"}
         </button>
+        {isPublished ? (
+          <button
+            type="button"
+            onClick={onUnpublish}
+            disabled={!canPublish || publishing || saving}
+            className="rounded-full border border-border px-4 py-2 text-sm font-semibold hover:border-accent disabled:opacity-50"
+          >
+            {publishing ? "Updating…" : "Unpublish"}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={onPublish}
+            disabled={!canPublish || publishing || saving}
+            className="rounded-full border border-accent px-4 py-2 text-sm font-semibold text-accent hover:bg-accent hover:text-white disabled:opacity-50"
+          >
+            {publishing ? "Publishing…" : "Publish"}
+          </button>
+        )}
       </div>
       {statusMessage && <p className="w-full text-sm text-muted sm:order-last">{statusMessage}</p>}
     </div>

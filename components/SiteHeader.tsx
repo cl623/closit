@@ -2,25 +2,41 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { fetchIsAdmin } from "@/lib/data/admin";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
 export function SiteHeader() {
   const [email, setEmail] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const configured = isSupabaseConfigured();
 
   useEffect(() => {
     if (!configured) return;
 
     const supabase = createClient();
-    supabase.auth.getUser().then(({ data }) => {
+
+    async function syncUser() {
+      const { data } = await supabase.auth.getUser();
       setEmail(data.user?.email ?? null);
-    });
+      if (data.user) {
+        setIsAdmin(await fetchIsAdmin());
+      } else {
+        setIsAdmin(false);
+      }
+    }
+
+    void syncUser();
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setEmail(session?.user?.email ?? null);
+      if (session?.user) {
+        void fetchIsAdmin().then(setIsAdmin);
+      } else {
+        setIsAdmin(false);
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -31,6 +47,7 @@ export function SiteHeader() {
     const supabase = createClient();
     await supabase.auth.signOut();
     setEmail(null);
+    setIsAdmin(false);
   }
 
   return (
@@ -39,21 +56,40 @@ export function SiteHeader() {
         <Link href="/" className="font-[family-name:var(--font-display)] text-2xl tracking-tight">
           clos.it
         </Link>
-        <nav className="flex items-center gap-4 text-sm font-medium text-muted">
+        <nav className="flex flex-wrap items-center justify-end gap-3 text-sm font-medium text-muted sm:gap-4">
+          <Link href="/feed" className="hover:text-foreground">
+            Feed
+          </Link>
           <Link href="/studio" className="hover:text-foreground">
             Studio
+          </Link>
+          <Link href="/outfits" className="hover:text-foreground">
+            Outfits
+          </Link>
+          <Link href="/leaderboards" className="hover:text-foreground">
+            Leaderboards
           </Link>
           <Link href="/upload" className="hover:text-foreground">
             Upload
           </Link>
           {email ? (
-            <button
-              type="button"
-              onClick={signOut}
-              className="rounded-full border border-border px-3 py-1.5 text-foreground hover:border-accent"
-            >
-              Sign out
-            </button>
+            <>
+              <Link href="/reports" className="hover:text-foreground">
+                My reports
+              </Link>
+              {isAdmin && (
+                <Link href="/admin" className="hover:text-foreground">
+                  Admin
+                </Link>
+              )}
+              <button
+                type="button"
+                onClick={signOut}
+                className="rounded-full border border-border px-3 py-1.5 text-foreground hover:border-accent"
+              >
+                Sign out
+              </button>
+            </>
           ) : (
             <Link
               href="/login"
