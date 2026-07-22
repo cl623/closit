@@ -1,0 +1,12 @@
+﻿<svg xmlns='http://www.w3.org/2000/svg' width='400' height='600' viewBox='0 0 400 600'>
+  <ellipse cx='200' cy='95' rx='48' ry='55' fill='#f2c9a8'/>
+  <rect x='175' y='145' width='50' height='28' rx='8' fill='#f2c9a8'/>
+  <path d='M140 175 C140 165 260 165 260 175 L275 360 L125 360 Z' fill='#f2c9a8'/>
+  <rect x='125' y='360' width='55' height='170' rx='20' fill='#f2c9a8'/>
+  <rect x='220' y='360' width='55' height='170' rx='20' fill='#f2c9a8'/>
+  <rect x='80' y='175' width='40' height='150' rx='18' fill='#f2c9a8'/>
+  <rect x='280' y='175' width='40' height='150' rx='18' fill='#f2c9a8'/>
+  <ellipse cx='182' cy='95' rx='5' ry='6' fill='#3a2f2a'/>
+  <ellipse cx='218' cy='95' rx='5' ry='6' fill='#3a2f2a'/>
+  <path d='M188 118 Q200 128 212 118' stroke='#c48a6a' stroke-width='3' fill='none' stroke-linecap='round'/>
+</svg>
