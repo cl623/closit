@@ -56,34 +56,29 @@ async function loadItemEngagement(
 
   const supabase = requireSupabase();
 
-  const [{ data: likes }, { data: saves }, viewerLikesResult, viewerSavesResult] =
-    await Promise.all([
-      supabase.from("item_likes").select("item_id").in("item_id", itemIds),
-      supabase.from("item_saves").select("item_id").in("item_id", itemIds),
-      viewerId
-        ? supabase
-            .from("item_likes")
-            .select("item_id")
-            .eq("user_id", viewerId)
-            .in("item_id", itemIds)
-        : Promise.resolve({ data: [] as { item_id: string }[] }),
-      viewerId
-        ? supabase
-            .from("item_saves")
-            .select("item_id")
-            .eq("user_id", viewerId)
-            .in("item_id", itemIds)
-        : Promise.resolve({ data: [] as { item_id: string }[] }),
-    ]);
+  const [{ data: counts }, viewerLikesResult, viewerSavesResult] = await Promise.all([
+    supabase.rpc("count_item_engagement", { p_item_ids: itemIds }),
+    viewerId
+      ? supabase
+          .from("item_likes")
+          .select("item_id")
+          .eq("user_id", viewerId)
+          .in("item_id", itemIds)
+      : Promise.resolve({ data: [] as { item_id: string }[] }),
+    viewerId
+      ? supabase
+          .from("item_saves")
+          .select("item_id")
+          .eq("user_id", viewerId)
+          .in("item_id", itemIds)
+      : Promise.resolve({ data: [] as { item_id: string }[] }),
+  ]);
 
   const likeCounts = new Map<string, number>();
-  for (const row of likes ?? []) {
-    likeCounts.set(row.item_id, (likeCounts.get(row.item_id) ?? 0) + 1);
-  }
-
   const saveCounts = new Map<string, number>();
-  for (const row of saves ?? []) {
-    saveCounts.set(row.item_id, (saveCounts.get(row.item_id) ?? 0) + 1);
+  for (const row of counts ?? []) {
+    likeCounts.set(row.item_id, Number(row.like_count ?? 0));
+    saveCounts.set(row.item_id, Number(row.save_count ?? 0));
   }
 
   const likedByViewer = new Set((viewerLikesResult.data ?? []).map((r) => r.item_id));
@@ -107,8 +102,8 @@ async function loadOutfitLikeState(
   if (outfitIds.length === 0) return { counts, liked };
 
   const supabase = requireSupabase();
-  const [{ data: likes }, viewerLikesResult] = await Promise.all([
-    supabase.from("outfit_likes").select("outfit_id").in("outfit_id", outfitIds),
+  const [{ data: likeCounts }, viewerLikesResult] = await Promise.all([
+    supabase.rpc("count_outfit_likes", { p_outfit_ids: outfitIds }),
     viewerId
       ? supabase
           .from("outfit_likes")
@@ -118,8 +113,8 @@ async function loadOutfitLikeState(
       : Promise.resolve({ data: [] as { outfit_id: string }[] }),
   ]);
 
-  for (const row of likes ?? []) {
-    counts.set(row.outfit_id, (counts.get(row.outfit_id) ?? 0) + 1);
+  for (const row of likeCounts ?? []) {
+    counts.set(row.outfit_id, Number(row.like_count ?? 0));
   }
   for (const row of viewerLikesResult.data ?? []) {
     liked.add(row.outfit_id);
@@ -315,6 +310,15 @@ export async function toggleOutfitLike(
       .eq("outfit_id", outfitId);
     if (error) throw error;
   } else {
+    const { data: outfit, error: outfitError } = await supabase
+      .from("outfits")
+      .select("id")
+      .eq("id", outfitId)
+      .eq("is_published", true)
+      .maybeSingle();
+    if (outfitError) throw outfitError;
+    if (!outfit) throw new Error("Only published outfits can be liked.");
+
     const { error } = await supabase.from("outfit_likes").insert({
       user_id: viewerId,
       outfit_id: outfitId,
@@ -322,14 +326,13 @@ export async function toggleOutfitLike(
     if (error) throw error;
   }
 
-  const { count, error: countError } = await supabase
-    .from("outfit_likes")
-    .select("outfit_id", { count: "exact", head: true })
-    .eq("outfit_id", outfitId);
-
+  const { data: counts, error: countError } = await supabase.rpc("count_outfit_likes", {
+    p_outfit_ids: [outfitId],
+  });
   if (countError) throw countError;
 
-  return { liked: !existing, like_count: count ?? 0 };
+  const likeCount = Number(counts?.[0]?.like_count ?? 0);
+  return { liked: !existing, like_count: likeCount };
 }
 
 export async function toggleItemLike(
@@ -361,14 +364,12 @@ export async function toggleItemLike(
     if (error) throw error;
   }
 
-  const { count, error: countError } = await supabase
-    .from("item_likes")
-    .select("item_id", { count: "exact", head: true })
-    .eq("item_id", itemId);
-
+  const { data: counts, error: countError } = await supabase.rpc("count_item_engagement", {
+    p_item_ids: [itemId],
+  });
   if (countError) throw countError;
 
-  return { liked: !existing, like_count: count ?? 0 };
+  return { liked: !existing, like_count: Number(counts?.[0]?.like_count ?? 0) };
 }
 
 export async function toggleItemSave(
@@ -400,14 +401,12 @@ export async function toggleItemSave(
     if (error) throw error;
   }
 
-  const { count, error: countError } = await supabase
-    .from("item_saves")
-    .select("item_id", { count: "exact", head: true })
-    .eq("item_id", itemId);
-
+  const { data: counts, error: countError } = await supabase.rpc("count_item_engagement", {
+    p_item_ids: [itemId],
+  });
   if (countError) throw countError;
 
-  return { saved: !existing, save_count: count ?? 0 };
+  return { saved: !existing, save_count: Number(counts?.[0]?.save_count ?? 0) };
 }
 
 /** Owner-facing helper: load draft including publish state. */

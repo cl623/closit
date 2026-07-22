@@ -298,7 +298,7 @@ export function StudioClient({ outfitId }: StudioClientProps) {
         saving={saving}
         publishing={publishing}
         isPublished={isPublished}
-        canPublish={Boolean(userId && configured && (currentOutfitId || equippedCount > 0))}
+        canPublish={Boolean(userId && configured && (isPublished || equippedCount > 0))}
         statusMessage={statusMessage}
         onNameChange={setName}
         onSave={handleSave}

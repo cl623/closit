@@ -32,6 +32,7 @@ export async function createReport(input: CreateReportInput): Promise<Report> {
     throw new Error("Outfit id is required.");
   }
 
+  // Status is always open on create; reporters cannot update moderation fields (RLS).
   const { data, error } = await supabase
     .from("reports")
     .insert({
@@ -42,7 +43,7 @@ export async function createReport(input: CreateReportInput): Promise<Report> {
       reported_user_id: input.reportedUserId ?? null,
       reason: input.reason.trim(),
       notes: (input.notes ?? "").trim(),
-      status: "open",
+      status: "open" as const,
     })
     .select("*")
     .single();
