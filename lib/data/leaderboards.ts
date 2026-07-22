@@ -8,30 +8,31 @@ import type {
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/client";
 
+export type BadgeAward = {
+  badge_id: string;
+  name: string;
+  description: string;
+  period_key: string;
+  awarded_at: string;
+};
+
 function asSingle<T>(value: T | T[] | null | undefined): T | null {
   if (!value) return null;
   return Array.isArray(value) ? (value[0] ?? null) : value;
 }
 
-export async function fetchTopOutfitsOfWeek(
-  limit = 10,
+async function hydrateOutfitRows(
+  data: Array<{
+    outfit_id: string;
+    outfit_name: string;
+    creator_id: string;
+    creator_name: string | null;
+    avatar_id: string;
+    published_at: string | null;
+    like_count: number;
+  }>,
 ): Promise<LeaderboardOutfitRow[]> {
-  if (!isSupabaseConfigured()) {
-    return [];
-  }
-
   const supabase = createClient();
-  const { data, error } = await supabase
-    .from("leaderboard_outfits_week")
-    .select("*")
-    .order("like_count", { ascending: false })
-    .order("published_at", { ascending: false })
-    .limit(limit);
-
-  if (error || !data?.length) {
-    if (error) console.warn("Failed to fetch outfit leaderboard", error.message);
-    return [];
-  }
 
   const rows = await Promise.all(
     data.map(async (row, index): Promise<LeaderboardOutfitRow | null> => {
@@ -76,10 +77,27 @@ export async function fetchTopOutfitsOfWeek(
   return rows.filter((row): row is LeaderboardOutfitRow => row !== null);
 }
 
-export async function fetchTopCreators(limit = 10): Promise<LeaderboardCreatorRow[]> {
-  if (!isSupabaseConfigured()) {
+export async function fetchTopOutfitsOfWeek(limit = 10): Promise<LeaderboardOutfitRow[]> {
+  if (!isSupabaseConfigured()) return [];
+
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("leaderboard_outfits_week")
+    .select("*")
+    .order("like_count", { ascending: false })
+    .order("published_at", { ascending: false })
+    .limit(limit);
+
+  if (error || !data?.length) {
+    if (error) console.warn("Failed to fetch outfit leaderboard", error.message);
     return [];
   }
+
+  return hydrateOutfitRows(data);
+}
+
+export async function fetchTopCreators(limit = 10): Promise<LeaderboardCreatorRow[]> {
+  if (!isSupabaseConfigured()) return [];
 
   const supabase = createClient();
   const { data, error } = await supabase
@@ -101,4 +119,79 @@ export async function fetchTopCreators(limit = 10): Promise<LeaderboardCreatorRo
     item_save_count: row.item_save_count,
     rank: index + 1,
   }));
+}
+
+export async function fetchTopOutfitsOfMonth(limit = 10): Promise<LeaderboardOutfitRow[]> {
+  if (!isSupabaseConfigured()) return [];
+
+  const supabase = createClient();
+  await supabase.rpc("sync_monthly_badges");
+
+  const { data, error } = await supabase
+    .from("leaderboard_outfits_month")
+    .select("*")
+    .order("like_count", { ascending: false })
+    .order("published_at", { ascending: false })
+    .limit(limit);
+
+  if (error || !data?.length) {
+    if (error) console.warn("Failed to fetch monthly outfit leaderboard", error.message);
+    return [];
+  }
+
+  return hydrateOutfitRows(data);
+}
+
+export async function fetchTopCreatorsOfMonth(limit = 10): Promise<LeaderboardCreatorRow[]> {
+  if (!isSupabaseConfigured()) return [];
+
+  const supabase = createClient();
+  await supabase.rpc("sync_monthly_badges");
+
+  const { data, error } = await supabase
+    .from("leaderboard_creators_month")
+    .select("*")
+    .order("outfit_like_count", { ascending: false })
+    .order("item_save_count", { ascending: false })
+    .limit(limit);
+
+  if (error || !data?.length) {
+    if (error) console.warn("Failed to fetch monthly creator leaderboard", error.message);
+    return [];
+  }
+
+  return data.map((row, index) => ({
+    creator_id: row.creator_id,
+    creator_name: row.creator_name,
+    outfit_like_count: row.outfit_like_count,
+    item_save_count: row.item_save_count,
+    rank: index + 1,
+  }));
+}
+
+export async function fetchUserBadges(userId: string): Promise<BadgeAward[]> {
+  if (!isSupabaseConfigured()) return [];
+
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("user_badges")
+    .select("badge_id, period_key, awarded_at, badge:badges(name, description)")
+    .eq("user_id", userId)
+    .order("awarded_at", { ascending: false });
+
+  if (error || !data) {
+    if (error) console.warn("Failed to fetch badges", error.message);
+    return [];
+  }
+
+  return data.map((row) => {
+    const badge = asSingle(row.badge) as { name: string; description: string } | null;
+    return {
+      badge_id: row.badge_id,
+      name: badge?.name ?? row.badge_id,
+      description: badge?.description ?? "",
+      period_key: row.period_key,
+      awarded_at: row.awarded_at,
+    };
+  });
 }

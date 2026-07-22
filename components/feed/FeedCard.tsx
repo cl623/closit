@@ -29,7 +29,15 @@ export function FeedCard({ outfit }: FeedCardProps) {
             >
               {outfit.name}
             </Link>
-            <p className="text-sm text-muted">by {creatorLabel}</p>
+            <p className="text-sm text-muted">
+              by{" "}
+              <Link
+                href={`/u/${outfit.creator.id}`}
+                className="underline-offset-2 hover:text-accent hover:underline"
+              >
+                {creatorLabel}
+              </Link>
+            </p>
           </div>
           {typeof outfit.week_rank === "number" && outfit.week_rank > 0 && (
             <span className="shrink-0 rounded-full border border-border px-2.5 py-1 text-xs font-semibold text-muted">
