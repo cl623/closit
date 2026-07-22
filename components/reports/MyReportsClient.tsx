@@ -93,7 +93,7 @@ export function MyReportsClient() {
       <div>
         <h1 className="font-[family-name:var(--font-display)] text-3xl">My reports</h1>
         <p className="text-sm text-muted">
-          Status updates for reports you filed. Moderation tools come later.
+          Only reports you filed. The full moderation queue is admin-only.
         </p>
       </div>
 

@@ -11,8 +11,9 @@ Gamified social mood-boarding — style 2D avatars with community fashion items.
 - **Outfit likes** plus per-item like / save-to-closet
 - **Weekly leaderboards** for top outfits and top creators
 - **Reporting** for items and outfits (submit + personal report list)
+- **Admin** moderation page (all reports + top 100 liked outfits/items)
 
-Phase 5 (analytics dashboard) is deferred. Full moderation admin UI is deferred.
+Phase 5 (analytics dashboard) is deferred.
 
 ## Setup
 
@@ -34,7 +35,13 @@ Fill in `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
 
 4. Enable Email auth (password) in Supabase Auth settings.
 
-5. Start the app:
+5. Grant admin access (optional) after signing up:
+
+```sql
+update public.profiles set is_admin = true where id = '<your-user-uuid>';
+```
+
+6. Start the app:
 
 ```bash
 npm run dev
@@ -51,6 +58,7 @@ Without Supabase env vars, the studio still loads local seed wardrobe assets fro
 - `/feed` — chronological published outfits
 - `/o/[id]` — published outfit detail (like / save / report)
 - `/leaderboards` — top 10 outfits of the week + top creators
-- `/reports` — reports I submitted
+- `/reports` — reports I submitted (not the full moderation queue)
+- `/admin` — admin only: all reports, top 100 liked outfits/items
 - `/upload` — import a transparent PNG (auth required)
 - `/login` — sign in / sign up

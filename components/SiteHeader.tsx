@@ -2,25 +2,41 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { fetchIsAdmin } from "@/lib/data/admin";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
 export function SiteHeader() {
   const [email, setEmail] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const configured = isSupabaseConfigured();
 
   useEffect(() => {
     if (!configured) return;
 
     const supabase = createClient();
-    supabase.auth.getUser().then(({ data }) => {
+
+    async function syncUser() {
+      const { data } = await supabase.auth.getUser();
       setEmail(data.user?.email ?? null);
-    });
+      if (data.user) {
+        setIsAdmin(await fetchIsAdmin());
+      } else {
+        setIsAdmin(false);
+      }
+    }
+
+    void syncUser();
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setEmail(session?.user?.email ?? null);
+      if (session?.user) {
+        void fetchIsAdmin().then(setIsAdmin);
+      } else {
+        setIsAdmin(false);
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -31,6 +47,7 @@ export function SiteHeader() {
     const supabase = createClient();
     await supabase.auth.signOut();
     setEmail(null);
+    setIsAdmin(false);
   }
 
   return (
@@ -58,8 +75,13 @@ export function SiteHeader() {
           {email ? (
             <>
               <Link href="/reports" className="hover:text-foreground">
-                Reports
+                My reports
               </Link>
+              {isAdmin && (
+                <Link href="/admin" className="hover:text-foreground">
+                  Admin
+                </Link>
+              )}
               <button
                 type="button"
                 onClick={signOut}
