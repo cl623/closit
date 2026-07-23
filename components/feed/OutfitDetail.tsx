@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   ItemEngagementButtons,
   OutfitLikeButton,
@@ -28,10 +28,7 @@ export function OutfitDetail({ outfit, signedIn }: OutfitDetailProps) {
   });
 
   const creatorLabel = outfit.creator.display_name?.trim() || "Anonymous";
-  const sortedItems = useMemo(
-    () => [...outfit.items].sort((a, b) => a.layer_z - b.layer_z),
-    [outfit.items],
-  );
+  const sortedItems = [...outfit.items].sort((a, b) => a.layer_z - b.layer_z);
 
   return (
     <div className="space-y-6">

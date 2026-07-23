@@ -19,7 +19,7 @@ type AvatarStageProps = {
 
 /**
  * Items are positioned by centering each image on (anchor_x, anchor_y)
- * expressed as fractions of the stage width/height. Render order uses layer_z.
+ * expressed as fractions of the stage width/height.
  */
 export function AvatarStage({ avatar, equippedItems, className, children }: AvatarStageProps) {
   const layers = [...equippedItems].sort((a, b) => a.layer_z - b.layer_z);
