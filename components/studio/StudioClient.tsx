@@ -164,6 +164,7 @@ export function StudioClient({ outfitId }: StudioClientProps) {
       equipped,
     });
     setCurrentOutfitId(result.id);
+    setIsPublished(false);
     if (!outfitId) {
       router.replace(`/studio/${result.id}`);
     }

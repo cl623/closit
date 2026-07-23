@@ -35,11 +35,13 @@ Fill in `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
 
 4. Enable Email auth (password) in Supabase Auth settings.
 
-5. Grant admin access (optional) after signing up:
+5. Grant admin access (optional) after signing up. Run this in the Supabase SQL editor as the database role (or when no admins exist yet — first-admin bootstrap is allowed):
 
 ```sql
 update public.profiles set is_admin = true where id = '<your-user-uuid>';
 ```
+
+If an older database still blocks that update, apply `supabase/migrations/20260722000008_pr_regression_fixes.sql` first.
 
 6. Start the app:
 
