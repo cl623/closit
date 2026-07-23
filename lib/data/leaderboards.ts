@@ -125,8 +125,6 @@ export async function fetchTopOutfitsOfMonth(limit = 10): Promise<LeaderboardOut
   if (!isSupabaseConfigured()) return [];
 
   const supabase = createClient();
-  await supabase.rpc("sync_monthly_badges");
-
   const { data, error } = await supabase
     .from("leaderboard_outfits_month")
     .select("*")
@@ -146,8 +144,6 @@ export async function fetchTopCreatorsOfMonth(limit = 10): Promise<LeaderboardCr
   if (!isSupabaseConfigured()) return [];
 
   const supabase = createClient();
-  await supabase.rpc("sync_monthly_badges");
-
   const { data, error } = await supabase
     .from("leaderboard_creators_month")
     .select("*")
@@ -169,29 +165,108 @@ export async function fetchTopCreatorsOfMonth(limit = 10): Promise<LeaderboardCr
   }));
 }
 
+function currentPeriodKey(): string {
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const month = String(now.getUTCMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+}
+
+/** Live current-month badge standings derived from leaderboard views (no writes). */
+async function fetchLiveMonthlyBadges(userId: string): Promise<BadgeAward[]> {
+  const supabase = createClient();
+  const period = currentPeriodKey();
+  const awarded_at = new Date().toISOString();
+
+  const [{ data: creators }, { data: outfits }, { data: badgeDefs }] = await Promise.all([
+    supabase
+      .from("leaderboard_creators_month")
+      .select("creator_id")
+      .order("outfit_like_count", { ascending: false })
+      .order("item_save_count", { ascending: false })
+      .limit(3),
+    supabase
+      .from("leaderboard_outfits_month")
+      .select("creator_id, like_count")
+      .order("like_count", { ascending: false })
+      .order("published_at", { ascending: false })
+      .limit(1),
+    supabase.from("badges").select("id, name, description"),
+  ]);
+
+  const defMap = new Map(
+    (badgeDefs ?? []).map((b: { id: string; name: string; description: string }) => [b.id, b]),
+  );
+  const awards: BadgeAward[] = [];
+
+  (creators ?? []).forEach((row: { creator_id: string }, index: number) => {
+    if (row.creator_id !== userId) return;
+    if (index === 0) {
+      const top = defMap.get("monthly_top_creator");
+      awards.push({
+        badge_id: "monthly_top_creator",
+        name: top?.name ?? "Top Creator",
+        description: top?.description ?? "",
+        period_key: period,
+        awarded_at,
+      });
+    }
+    const trend = defMap.get("monthly_trendsetter");
+    awards.push({
+      badge_id: "monthly_trendsetter",
+      name: trend?.name ?? "Trendsetter",
+      description: trend?.description ?? "",
+      period_key: period,
+      awarded_at,
+    });
+  });
+
+  const styleStar = outfits?.[0];
+  if (styleStar && styleStar.like_count > 0 && styleStar.creator_id === userId) {
+    const star = defMap.get("monthly_style_star");
+    awards.push({
+      badge_id: "monthly_style_star",
+      name: star?.name ?? "Style Star",
+      description: star?.description ?? "",
+      period_key: period,
+      awarded_at,
+    });
+  }
+
+  return awards;
+}
+
 export async function fetchUserBadges(userId: string): Promise<BadgeAward[]> {
   if (!isSupabaseConfigured()) return [];
 
   const supabase = createClient();
-  const { data, error } = await supabase
-    .from("user_badges")
-    .select("badge_id, period_key, awarded_at, badge:badges(name, description)")
-    .eq("user_id", userId)
-    .order("awarded_at", { ascending: false });
+  const period = currentPeriodKey();
 
-  if (error || !data) {
-    if (error) console.warn("Failed to fetch badges", error.message);
-    return [];
+  const [{ data, error }, live] = await Promise.all([
+    supabase
+      .from("user_badges")
+      .select("badge_id, period_key, awarded_at, badge:badges(name, description)")
+      .eq("user_id", userId)
+      .order("awarded_at", { ascending: false }),
+    fetchLiveMonthlyBadges(userId),
+  ]);
+
+  if (error) {
+    console.warn("Failed to fetch badges", error.message);
   }
 
-  return data.map((row) => {
-    const badge = asSingle(row.badge) as { name: string; description: string } | null;
-    return {
-      badge_id: row.badge_id,
-      name: badge?.name ?? row.badge_id,
-      description: badge?.description ?? "",
-      period_key: row.period_key,
-      awarded_at: row.awarded_at,
-    };
-  });
+  const stored = (data ?? [])
+    .filter((row) => row.period_key !== period)
+    .map((row) => {
+      const badge = asSingle(row.badge) as { name: string; description: string } | null;
+      return {
+        badge_id: row.badge_id,
+        name: badge?.name ?? row.badge_id,
+        description: badge?.description ?? "",
+        period_key: row.period_key,
+        awarded_at: row.awarded_at,
+      } satisfies BadgeAward;
+    });
+
+  return [...live, ...stored];
 }

@@ -17,3 +17,13 @@ grant all on all routines in schema public to anon, authenticated, service_role;
 alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
 alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
 alter default privileges in schema public grant all on routines to anon, authenticated, service_role;
+
+-- Re-lock privileged writers that must not be callable with the anon key.
+-- (Migrations revoke these, but the blanket routine grant above would reopen them.)
+do $$
+begin
+  if to_regprocedure('public.sync_monthly_badges()') is not null then
+    execute 'revoke all on function public.sync_monthly_badges() from public, anon, authenticated';
+    execute 'grant execute on function public.sync_monthly_badges() to service_role';
+  end if;
+end $$;
