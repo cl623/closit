@@ -4,7 +4,6 @@ import type {
   FashionItem,
   FeedOutfit,
   ItemEngagement,
-  OutfitWithItems,
   ProfileSummary,
 } from "@/lib/outfits/types";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
@@ -170,7 +169,6 @@ async function hydrateFeedOutfits(
         like_count: counts.get(row.id) ?? 0,
         liked_by_viewer: liked.has(row.id),
         item_engagement,
-        week_rank: null,
       };
     }),
   );
@@ -228,6 +226,19 @@ export async function unpublishOutfit(outfitId: string): Promise<void> {
   if (!data) throw new Error("Outfit not found or you do not own it.");
 }
 
+function encodeFeedCursor(publishedAt: string, id: string): string {
+  return `${publishedAt}::${id}`;
+}
+
+function decodeFeedCursor(cursor: string): { publishedAt: string; id: string } | null {
+  const sep = cursor.lastIndexOf("::");
+  if (sep <= 0) return null;
+  const publishedAt = cursor.slice(0, sep);
+  const id = cursor.slice(sep + 2);
+  if (!publishedAt || !id) return null;
+  return { publishedAt, id };
+}
+
 export async function fetchFeed(params?: {
   limit?: number;
   cursor?: string | null;
@@ -245,10 +256,21 @@ export async function fetchFeed(params?: {
     .select("*, avatar:avatars(*), creator:profiles!outfits_user_id_fkey(id, display_name)")
     .eq("is_published", true)
     .order("published_at", { ascending: false, nullsFirst: false })
+    .order("id", { ascending: false })
     .limit(limit + 1);
 
   if (params?.cursor) {
-    query = query.lt("published_at", params.cursor);
+    const decoded = decodeFeedCursor(params.cursor);
+    if (decoded) {
+      const { publishedAt, id } = decoded;
+      // Keyset pagination so ties on published_at do not drop rows.
+      query = query.or(
+        `published_at.lt."${publishedAt}",and(published_at.eq."${publishedAt}",id.lt.${id})`,
+      );
+    } else {
+      // Legacy timestamp-only cursors from before composite encoding.
+      query = query.lt("published_at", params.cursor);
+    }
   }
 
   const { data, error } = await query;
@@ -262,7 +284,10 @@ export async function fetchFeed(params?: {
   const page = hasMore ? rows.slice(0, limit) : rows;
   const outfits = await hydrateFeedOutfits(page, viewerId);
   const last = page[page.length - 1];
-  const nextCursor = hasMore && last?.published_at ? last.published_at : null;
+  const nextCursor =
+    hasMore && last?.published_at && last?.id
+      ? encodeFeedCursor(last.published_at, last.id)
+      : null;
 
   return { outfits, nextCursor };
 }
@@ -407,21 +432,4 @@ export async function toggleItemSave(
   if (countError) throw countError;
 
   return { saved: !existing, save_count: Number(counts?.[0]?.save_count ?? 0) };
-}
-
-/** Owner-facing helper: load draft including publish state. */
-export async function fetchOutfitPublishState(
-  outfitId: string,
-): Promise<Pick<OutfitWithItems, "id" | "is_published" | "published_at" | "user_id"> | null> {
-  if (!isSupabaseConfigured()) return null;
-
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("outfits")
-    .select("id, is_published, published_at, user_id")
-    .eq("id", outfitId)
-    .maybeSingle();
-
-  if (error || !data) return null;
-  return data;
 }

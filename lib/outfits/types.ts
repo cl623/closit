@@ -24,7 +24,6 @@ export type FashionItem = {
   created_at: string;
 };
 
-/** Item equipped on an outfit with a per-instance layer override. */
 export type EquippedPiece = FashionItem & {
   layer_z: number;
 };
@@ -46,9 +45,6 @@ export type OutfitItem = {
   slot_category: ItemCategory;
   layer_z: number;
 };
-
-/** @deprecated Prefer EquippedPiece[] — kept only for gradual migration. */
-export type EquippedSlots = Partial<Record<ItemCategory, FashionItem>>;
 
 export type OutfitWithItems = Outfit & {
   avatar: Avatar;

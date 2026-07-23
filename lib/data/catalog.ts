@@ -77,7 +77,6 @@ export async function fetchWardrobeItems(userId?: string | null): Promise<Fashio
     return data as FashionItem[];
   }
 
-  // System ∪ owned ∪ saved (item_saves) — dedupe by id
   const [{ data: ownedOrSystem, error: ownedError }, { data: saves, error: savesError }] =
     await Promise.all([
       supabase
@@ -193,57 +192,61 @@ export async function saveOutfitDraft(params: {
   avatarId: string;
   name: string;
   equipped: EquippedPiece[];
-}): Promise<{ id: string }> {
+}): Promise<{ id: string; is_published: false }> {
   if (!isSupabaseConfigured()) {
     throw new Error("Saving outfits requires Supabase configuration.");
   }
 
   const supabase = createClient();
   const pieces = params.equipped;
-  let outfitId = params.outfitId ?? null;
+  const itemPayload = pieces.map((piece) => ({
+    item_id: piece.id,
+    slot_category: piece.category,
+    layer_z: piece.layer_z,
+  }));
 
-  if (outfitId) {
-    const { error } = await supabase
-      .from("outfits")
-      .update({
-        avatar_id: params.avatarId,
-        name: params.name,
-      })
-      .eq("id", outfitId)
-      .eq("user_id", params.userId);
+  if (params.outfitId) {
+    const { data, error } = await supabase.rpc("replace_outfit_draft", {
+      p_outfit_id: params.outfitId,
+      p_avatar_id: params.avatarId,
+      p_name: params.name,
+      p_items: itemPayload,
+    });
 
     if (error) throw error;
-
-    await supabase.from("outfit_items").delete().eq("outfit_id", outfitId);
-  } else {
-    const { data, error } = await supabase
-      .from("outfits")
-      .insert({
-        user_id: params.userId,
-        avatar_id: params.avatarId,
-        name: params.name,
-        is_published: false,
-      })
-      .select("id")
-      .single();
-
-    if (error || !data) throw error ?? new Error("Failed to create outfit");
-    outfitId = data.id;
+    if (!data) throw new Error("Failed to save outfit draft");
+    return { id: data as string, is_published: false };
   }
 
+  const { data, error } = await supabase
+    .from("outfits")
+    .insert({
+      user_id: params.userId,
+      avatar_id: params.avatarId,
+      name: params.name,
+      is_published: false,
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) throw error ?? new Error("Failed to create outfit");
+
   if (pieces.length > 0) {
-    const { error } = await supabase.from("outfit_items").insert(
+    const { error: insertError } = await supabase.from("outfit_items").insert(
       pieces.map((piece) => ({
-        outfit_id: outfitId!,
+        outfit_id: data.id,
         item_id: piece.id,
         slot_category: piece.category,
         layer_z: piece.layer_z,
       })),
     );
-    if (error) throw error;
+    if (insertError) {
+      await supabase.from("outfits").delete().eq("id", data.id).eq("user_id", params.userId);
+      throw insertError;
+    }
   }
 
-  return { id: outfitId! };
+  return { id: data.id, is_published: false };
 }
 
 export async function deleteUserItem(itemId: string): Promise<void> {

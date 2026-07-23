@@ -51,22 +51,20 @@ export function LeaderboardSections({
                     className="w-full rounded-none border-0"
                   />
                 </Link>
-                <div className="flex items-start justify-between gap-3 p-4">
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-                      #{row.rank}
-                    </p>
-                    <Link
-                      href={`/o/${row.outfit_id}`}
-                      className="font-[family-name:var(--font-display)] text-xl hover:text-accent"
-                    >
-                      {row.outfit_name}
-                    </Link>
-                    <p className="text-sm text-muted">
-                      by {row.creator_name?.trim() || "Anonymous"} · {row.like_count} like
-                      {row.like_count === 1 ? "" : "s"}
-                    </p>
-                  </div>
+                <div className="min-w-0 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                    #{row.rank}
+                  </p>
+                  <Link
+                    href={`/o/${row.outfit_id}`}
+                    className="font-[family-name:var(--font-display)] text-xl hover:text-accent"
+                  >
+                    {row.outfit_name}
+                  </Link>
+                  <p className="text-sm text-muted">
+                    by {row.creator_name?.trim() || "Anonymous"} · {row.like_count} like
+                    {row.like_count === 1 ? "" : "s"}
+                  </p>
                 </div>
               </li>
             ))}
