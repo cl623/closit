@@ -2,18 +2,16 @@
 
 Gamified social mood-boarding — style 2D avatars with community fashion items.
 
-## MVP status (Phases 1–4 + studio upgrades)
+## MVP status (Phases 1–6)
 
 - **Dress-up studio** with multi-item categories and per-piece layer order
 - **Saved outfits library** (browse / edit / delete drafts)
 - **Draft outfit save/load** and **publish to feed**
 - **User PNG uploads** with category/color/style tags and anchor placement
 - **Outfit likes** plus per-item like / save-to-closet
-- **Weekly leaderboards** for top outfits and top creators
-- **Reporting** for items and outfits (submit + personal report list)
-- **Admin** moderation page (all reports + top 100 liked outfits/items)
-
-Phase 5 (analytics dashboard) is deferred.
+- **Weekly + monthly leaderboards** with monthly badges
+- **Public profiles** (`/u/[id]`) with outfits, uploads, and badges
+- **Reporting** + **admin** moderation, trend analytics (7d/30d), and account/item removal
 
 ## Setup
 
@@ -49,7 +47,7 @@ If an older database still blocks that update, apply `supabase/migrations/202607
 npm run dev
 ```
 
-Without Supabase env vars, the studio still loads local seed wardrobe assets from `/public/seed`. Uploads, draft saves, feed, leaderboards, and reporting require Supabase.
+Without Supabase env vars, the studio still loads local seed wardrobe assets from `/public/seed`. Uploads, draft saves, feed, leaderboards, reporting, and admin tools require Supabase.
 
 ## Routes
 
@@ -59,8 +57,9 @@ Without Supabase env vars, the studio still loads local seed wardrobe assets fro
 - `/outfits` — saved outfits library
 - `/feed` — chronological published outfits
 - `/o/[id]` — published outfit detail (like / save / report)
-- `/leaderboards` — top 10 outfits of the week + top creators
+- `/u/[id]` — public profile (badges, outfits, uploads)
+- `/leaderboards` — weekly and monthly rankings
 - `/reports` — reports I submitted (not the full moderation queue)
-- `/admin` — admin only: all reports, top 100 liked outfits/items
+- `/admin` — admin only: reports review, trend analytics, top liked lists
 - `/upload` — import a transparent PNG (auth required)
 - `/login` — sign in / sign up

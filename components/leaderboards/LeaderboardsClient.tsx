@@ -1,13 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { LeaderboardSections } from "@/components/leaderboards/LeaderboardSections";
-import { fetchTopCreators, fetchTopOutfitsOfWeek } from "@/lib/data/leaderboards";
+import {
+  LeaderboardSections,
+  type LeaderboardPeriod,
+} from "@/components/leaderboards/LeaderboardSections";
+import {
+  fetchTopCreators,
+  fetchTopCreatorsOfMonth,
+  fetchTopOutfitsOfMonth,
+  fetchTopOutfitsOfWeek,
+} from "@/lib/data/leaderboards";
 import type { LeaderboardCreatorRow, LeaderboardOutfitRow } from "@/lib/outfits/types";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
 export function LeaderboardsClient() {
   const configured = isSupabaseConfigured();
+  const [period, setPeriod] = useState<LeaderboardPeriod>("week");
   const [outfits, setOutfits] = useState<LeaderboardOutfitRow[]>([]);
   const [creators, setCreators] = useState<LeaderboardCreatorRow[]>([]);
   const [loading, setLoading] = useState(configured);
@@ -17,10 +26,11 @@ export function LeaderboardsClient() {
 
     let cancelled = false;
     async function load() {
-      const [nextOutfits, nextCreators] = await Promise.all([
-        fetchTopOutfitsOfWeek(10),
-        fetchTopCreators(10),
-      ]);
+      setLoading(true);
+      const [nextOutfits, nextCreators] =
+        period === "week"
+          ? await Promise.all([fetchTopOutfitsOfWeek(10), fetchTopCreators(10)])
+          : await Promise.all([fetchTopOutfitsOfMonth(10), fetchTopCreatorsOfMonth(10)]);
       if (cancelled) return;
       setOutfits(nextOutfits);
       setCreators(nextCreators);
@@ -31,13 +41,19 @@ export function LeaderboardsClient() {
     return () => {
       cancelled = true;
     };
-  }, [configured]);
+  }, [configured, period]);
 
   if (loading) {
     return <p className="text-muted">Loading leaderboards…</p>;
   }
 
   return (
-    <LeaderboardSections outfits={outfits} creators={creators} configured={configured} />
+    <LeaderboardSections
+      period={period}
+      onPeriodChange={setPeriod}
+      outfits={outfits}
+      creators={creators}
+      configured={configured}
+    />
   );
 }

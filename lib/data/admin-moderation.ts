@@ -23,6 +23,14 @@ export type AdminTopItem = {
   like_count: number;
 };
 
+export type AdminReportRow = Report & {
+  reporter_name: string | null;
+  reported_user_name: string | null;
+  item_name: string | null;
+  outfit_name: string | null;
+  outfit_is_published: boolean | null;
+};
+
 function requireAdminClient() {
   if (!isSupabaseConfigured()) {
     throw new Error("Admin tools require Supabase configuration.");
@@ -30,7 +38,12 @@ function requireAdminClient() {
   return createClient();
 }
 
-export async function fetchAllReportsForAdmin(): Promise<Report[]> {
+function asSingle<T>(value: T | T[] | null | undefined): T | null {
+  if (!value) return null;
+  return Array.isArray(value) ? (value[0] ?? null) : value;
+}
+
+export async function fetchAllReportsForAdmin(): Promise<AdminReportRow[]> {
   const isAdmin = await fetchIsAdmin();
   if (!isAdmin) {
     throw new Error("Admin access required.");
@@ -39,11 +52,48 @@ export async function fetchAllReportsForAdmin(): Promise<Report[]> {
   const supabase = requireAdminClient();
   const { data, error } = await supabase
     .from("reports")
-    .select("*")
+    .select(
+      `
+      *,
+      reporter:profiles!reports_reporter_id_fkey(display_name),
+      reported_user:profiles!reports_reported_user_id_fkey(display_name),
+      item:items(id, name),
+      outfit:outfits(id, name, is_published)
+    `,
+    )
     .order("created_at", { ascending: false });
 
   if (error) throw error;
-  return (data ?? []) as Report[];
+
+  return (data ?? []).map((row) => {
+    const reporter = asSingle(row.reporter) as { display_name: string | null } | null;
+    const reportedUser = asSingle(row.reported_user) as { display_name: string | null } | null;
+    const item = asSingle(row.item) as { id: string; name: string } | null;
+    const outfit = asSingle(row.outfit) as {
+      id: string;
+      name: string;
+      is_published: boolean;
+    } | null;
+
+    return {
+      id: row.id,
+      reporter_id: row.reporter_id,
+      target_type: row.target_type,
+      item_id: row.item_id,
+      outfit_id: row.outfit_id,
+      reported_user_id: row.reported_user_id,
+      reason: row.reason,
+      notes: row.notes,
+      status: row.status,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      reporter_name: reporter?.display_name ?? null,
+      reported_user_name: reportedUser?.display_name ?? null,
+      item_name: item?.name ?? null,
+      outfit_name: outfit?.name ?? null,
+      outfit_is_published: outfit?.is_published ?? null,
+    } satisfies AdminReportRow;
+  });
 }
 
 export async function updateReportStatus(

@@ -42,7 +42,15 @@ export function OutfitDetail({ outfit, signedIn }: OutfitDetailProps) {
             Outfit
           </p>
           <h1 className="font-[family-name:var(--font-display)] text-3xl">{outfit.name}</h1>
-          <p className="text-sm text-muted">by {creatorLabel}</p>
+          <p className="text-sm text-muted">
+            by{" "}
+            <Link
+              href={`/u/${outfit.creator.id}`}
+              className="underline-offset-2 hover:text-accent hover:underline"
+            >
+              {creatorLabel}
+            </Link>
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <OutfitLikeButton
